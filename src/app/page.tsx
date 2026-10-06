@@ -2,14 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Area, Task, TaskStatus, ActiveView, ParsedVoiceTask } from '../lib/types';
-import {
-  loadLocalAreas,
-  saveLocalAreas,
-  loadLocalTasks,
-  saveLocalTasks,
-  supabase,
-  isSupabaseConfigured,
-} from '../lib/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import { STATUS_LABELS, generateId } from '../lib/utils';
 import { Sidebar } from '../components/Sidebar';
 import { Topbar } from '../components/Topbar';
@@ -56,88 +49,69 @@ export default function Home() {
     }, 2500);
   }, []);
 
-  // Initial Data Loading & Realtime Subscription
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      const localA = loadLocalAreas();
-      const localT = loadLocalTasks();
+  // Fetch all data directly from Supabase database
+  const fetchInitialData = useCallback(async () => {
+    try {
+      const { data: remoteAreas, error: aErr } = await supabase
+        .from('areas')
+        .select('*')
+        .order('position');
+      const { data: remoteTasks, error: tErr } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('position');
 
-      if (localA && localA.length > 0) setAreas(localA);
-      if (localT && localT.length > 0) setTasks(localT);
+      if (aErr) console.error('Supabase areas select error:', aErr);
+      if (tErr) console.error('Supabase tasks select error:', tErr);
 
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data: remoteAreas, error: aErr } = await supabase.from('areas').select('*').order('position');
-          const { data: remoteTasks, error: tErr } = await supabase.from('tasks').select('*').order('position');
-
-          if (aErr) console.error('Supabase areas fetch error:', aErr);
-          if (tErr) console.error('Supabase tasks fetch error:', tErr);
-
-          if (remoteAreas && remoteAreas.length > 0) {
-            setAreas(remoteAreas);
-            saveLocalAreas(remoteAreas);
-          }
-
-          if (remoteTasks && remoteTasks.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const mapped = remoteTasks.map((t: any) => ({
-              id: String(t.id),
-              title: t.title,
-              description: t.description || '',
-              area: t.area_id || t.area || '',
-              status: t.status,
-              date: t.date || '',
-              time: t.time || '',
-              priority: t.priority,
-              position: t.position || 0,
-              created_at: t.created_at,
-              updated_at: t.updated_at,
-            }));
-            setTasks(mapped);
-            saveLocalTasks(mapped);
-          }
-        } catch (e) {
-          console.error('Supabase fetch error, keeping local state', e);
-        }
+      if (remoteAreas) {
+        setAreas(remoteAreas);
       }
-    };
 
-    fetchInitialData();
-
-    // Setup Supabase Realtime if configured
-    if (isSupabaseConfigured && supabase) {
-      const channel = supabase
-        .channel('public-db-changes')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'tasks' },
-          () => fetchInitialData()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'areas' },
-          () => fetchInitialData()
-        )
-        .subscribe();
-
-      return () => {
-        supabase?.removeChannel(channel);
-      };
+      if (remoteTasks) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = remoteTasks.map((t: any) => ({
+          id: String(t.id),
+          title: t.title,
+          description: t.description || '',
+          area: t.area_id || t.area || '',
+          status: t.status,
+          date: t.date || '',
+          time: t.time || '',
+          priority: t.priority,
+          position: t.position || 0,
+          created_at: t.created_at,
+          updated_at: t.updated_at,
+        }));
+        setTasks(mapped);
+      }
+    } catch (e) {
+      console.error('Supabase fetch error:', e);
     }
   }, []);
 
-  // Persist Local State whenever areas or tasks change
   useEffect(() => {
-    if (areas.length > 0) {
-      saveLocalAreas(areas);
-    }
-  }, [areas]);
+    fetchInitialData();
 
-  useEffect(() => {
-    if (tasks.length > 0) {
-      saveLocalTasks(tasks);
-    }
-  }, [tasks]);
+    // Supabase Realtime live sync across devices/tabs
+    const channel = supabase
+      .channel('db-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        () => fetchInitialData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'areas' },
+        () => fetchInitialData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchInitialData]);
 
   // Dark Mode Toggle Class
   useEffect(() => {
@@ -154,7 +128,7 @@ export default function Home() {
     setActiveView('board');
   };
 
-  // Task Operations
+  // Task Operations (Direct Supabase)
   const handleSaveTask = async (
     taskData: Omit<Task, 'id'>,
     existingId?: string
@@ -176,36 +150,37 @@ export default function Home() {
       setTasks((prev) => [newTask, ...prev]);
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const dbPayload = {
-        id: taskId,
-        title: taskData.title,
-        description: taskData.description || '',
-        area_id: taskData.area,
-        status: taskData.status,
-        date: taskData.date || null,
-        time: taskData.time || null,
-        priority: taskData.priority,
-        position: Date.now(),
-        updated_at: new Date().toISOString(),
-      };
+    const dbPayload = {
+      id: taskId,
+      title: taskData.title,
+      description: taskData.description || '',
+      area_id: taskData.area,
+      status: taskData.status,
+      date: taskData.date || null,
+      time: taskData.time || null,
+      priority: taskData.priority,
+      position: Date.now(),
+      updated_at: new Date().toISOString(),
+    };
 
-      if (existingId) {
-        await supabase.from('tasks').update(dbPayload).eq('id', existingId);
-      } else {
-        await supabase.from('tasks').insert([dbPayload]);
-      }
+    if (existingId) {
+      const { error } = await supabase.from('tasks').update(dbPayload).eq('id', existingId);
+      if (error) console.error('Supabase task update error:', error);
+    } else {
+      const { error } = await supabase.from('tasks').insert([dbPayload]);
+      if (error) console.error('Supabase task insert error:', error);
     }
 
     showToast(existingId ? 'Zadanie zapisane' : 'Dodano zadanie');
+    fetchInitialData();
   };
 
   const handleDeleteTask = async (taskId: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    if (isSupabaseConfigured && supabase) {
-      await supabase.from('tasks').delete().eq('id', taskId);
-    }
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    if (error) console.error('Supabase task delete error:', error);
     showToast('Zadanie usunięte');
+    fetchInitialData();
   };
 
   const handleUpdateTaskStatus = async (
@@ -220,53 +195,55 @@ export default function Home() {
       )
     );
 
-    if (isSupabaseConfigured && supabase) {
-      await supabase
-        .from('tasks')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', taskId);
-    }
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', taskId);
 
+    if (error) console.error('Supabase task status update error:', error);
     showToast(`Status zmieniony na: ${STATUS_LABELS[newStatus]}`);
   };
 
-  // Area Operations
+  // Area Operations (Direct Supabase)
   const handleSaveArea = async (
     areaData: Omit<Area, 'id'>,
     existingId?: string
   ) => {
+    const areaId =
+      existingId ||
+      areaData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9ąćęłńóśźż]+/g, '-') +
+      '-' +
+      Date.now().toString().slice(-4);
+
+    const dbPayload = {
+      id: areaId,
+      name: areaData.name,
+      desc: areaData.desc || '',
+      color: areaData.color || '#2f80ed',
+      position: Date.now(),
+      created_at: new Date().toISOString(),
+    };
+
     if (existingId) {
       setAreas((prev) =>
         prev.map((a) => (a.id === existingId ? { ...a, ...areaData } : a))
       );
-      if (isSupabaseConfigured && supabase) {
-        await supabase.from('areas').update(areaData).eq('id', existingId);
-      }
-      showToast('Obszar zaktualizowany');
+      const { error } = await supabase.from('areas').update(dbPayload).eq('id', existingId);
+      if (error) console.error('Supabase area update error:', error);
     } else {
-      const newAreaId =
-        areaData.name
-          .toLowerCase()
-          .replace(/[^a-z0-9ąćęłńóśźż]+/g, '-') +
-        '-' +
-        Date.now().toString().slice(-4);
+      setAreas((prev) => [...prev, { id: areaId, ...areaData }]);
+      const { error } = await supabase.from('areas').insert([dbPayload]);
+      if (error) console.error('Supabase area insert error:', error);
+    }
 
-      const newArea: Area = {
-        id: newAreaId,
-        ...areaData,
-        position: Date.now(),
-        created_at: new Date().toISOString(),
-      };
-      setAreas((prev) => [...prev, newArea]);
-
-      if (isSupabaseConfigured && supabase) {
-        await supabase.from('areas').insert([newArea]);
-      }
-
-      showToast('Utworzono obszar');
-      setCurrentAreaId(newAreaId);
+    showToast(existingId ? 'Obszar zaktualizowany' : 'Utworzono obszar');
+    if (!existingId) {
+      setCurrentAreaId(areaId);
       setActiveView('board');
     }
+    fetchInitialData();
   };
 
   const handleConfirmDeleteArea = async (
@@ -278,23 +255,17 @@ export default function Home() {
       setTasks((prev) =>
         prev.map((t) => (t.area === areaId ? { ...t, area: targetAreaId } : t))
       );
-      if (isSupabaseConfigured && supabase) {
-        await supabase
-          .from('tasks')
-          .update({ area: targetAreaId })
-          .eq('area', areaId);
-      }
+      await supabase
+        .from('tasks')
+        .update({ area_id: targetAreaId })
+        .eq('area_id', areaId);
     } else if (action === 'deleteAll') {
       setTasks((prev) => prev.filter((t) => t.area !== areaId));
-      if (isSupabaseConfigured && supabase) {
-        await supabase.from('tasks').delete().eq('area', areaId);
-      }
+      await supabase.from('tasks').delete().eq('area_id', areaId);
     }
 
     setAreas((prev) => prev.filter((a) => a.id !== areaId));
-    if (isSupabaseConfigured && supabase) {
-      await supabase.from('areas').delete().eq('id', areaId);
-    }
+    await supabase.from('areas').delete().eq('id', areaId);
 
     showToast('Obszar został usunięty');
 
@@ -306,6 +277,7 @@ export default function Home() {
         setActiveView('today');
       }
     }
+    fetchInitialData();
   };
 
   // Voice Task Confirmation
