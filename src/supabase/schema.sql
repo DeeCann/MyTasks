@@ -6,7 +6,7 @@ create table if not exists public.areas (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade default auth.uid(),
   name text not null,
-  desc text default '',
+  "desc" text default '',
   color text default '#2f80ed',
   position double precision default 0,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
