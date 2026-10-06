@@ -64,54 +64,23 @@ export default function Home() {
           const { data: remoteAreas } = await supabase.from('areas').select('*').order('position');
           const { data: remoteTasks } = await supabase.from('tasks').select('*').order('position');
 
-          if (remoteAreas && remoteAreas.length > 0) {
-            setAreas(remoteAreas);
-          } else {
-            const initialA = loadLocalAreas();
-            setAreas(initialA);
-            try {
-              await supabase.from('areas').insert(initialA);
-            } catch (err) {
-              console.error('Error seeding initial areas to Supabase', err);
-            }
-          }
+          setAreas(remoteAreas || []);
 
-          if (remoteTasks && remoteTasks.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const mapped = remoteTasks.map((t: any) => ({
-              id: String(t.id),
-              title: t.title,
-              description: t.description || '',
-              area: t.area_id || t.area || 'medai',
-              status: t.status,
-              date: t.date || '',
-              time: t.time || '',
-              priority: t.priority,
-              position: t.position || 0,
-              created_at: t.created_at,
-              updated_at: t.updated_at,
-            }));
-            setTasks(mapped);
-          } else {
-            const initialT = loadLocalTasks();
-            setTasks(initialT);
-            try {
-              const dbTasks = initialT.map((t) => ({
-                id: String(t.id),
-                title: t.title,
-                description: t.description || '',
-                area_id: t.area,
-                status: t.status,
-                date: t.date || null,
-                time: t.time || null,
-                priority: t.priority,
-                position: t.position || 0,
-              }));
-              await supabase.from('tasks').insert(dbTasks);
-            } catch (err) {
-              console.error('Error seeding initial tasks to Supabase', err);
-            }
-          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const mapped = (remoteTasks || []).map((t: any) => ({
+            id: String(t.id),
+            title: t.title,
+            description: t.description || '',
+            area: t.area_id || t.area || '',
+            status: t.status,
+            date: t.date || '',
+            time: t.time || '',
+            priority: t.priority,
+            position: t.position || 0,
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+          }));
+          setTasks(mapped);
         } catch (e) {
           console.error('Supabase fetch error, fallback to local', e);
           setAreas(loadLocalAreas());
