@@ -2,12 +2,30 @@ import { createClient } from '@supabase/supabase-js';
 import { Area, Task } from './types';
 import { INITIAL_AREAS, INITIAL_TASKS } from './initialData';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLIC_URL ||
+  '';
+
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_DEFAULT_ANON_KEY ||
+  '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && supabaseAnonKey && supabaseUrl !== 'YOUR_SUPABASE_URL'
 );
+
+if (typeof window !== 'undefined') {
+  console.log(
+    '[MyTasks Storage Engine]',
+    isSupabaseConfigured
+      ? 'Connected to Supabase Cloud Database'
+      : 'Using LocalStorage Persistence Engine'
+  );
+}
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
