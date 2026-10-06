@@ -32,39 +32,32 @@ create table if not exists public.tasks (
 alter table public.areas enable row level security;
 alter table public.tasks enable row level security;
 
--- RLS Policies for Areas
-create policy "Users can view their own areas"
-  on public.areas for select
-  using (auth.uid() = user_id or user_id is null);
+-- Drop old policies if exist
+drop policy if exists "Allow full access for all users" on public.areas;
+drop policy if exists "Allow full access for all users" on public.tasks;
+drop policy if exists "Users can view their own areas" on public.areas;
+drop policy if exists "Users can insert their own areas" on public.areas;
+drop policy if exists "Users can update their own areas" on public.areas;
+drop policy if exists "Users can delete their own areas" on public.areas;
+drop policy if exists "Users can view their own tasks" on public.tasks;
+drop policy if exists "Users can insert their own tasks" on public.tasks;
+drop policy if exists "Users can update their own tasks" on public.tasks;
+drop policy if exists "Users can delete their own tasks" on public.tasks;
 
-create policy "Users can insert their own areas"
-  on public.areas for insert
-  with check (auth.uid() = user_id or user_id is null);
+-- Create Permissive RLS Policies allowing full read/write access for app clients
+create policy "Allow full access for all users"
+  on public.areas for all
+  using (true)
+  with check (true);
 
-create policy "Users can update their own areas"
-  on public.areas for update
-  using (auth.uid() = user_id or user_id is null);
+create policy "Allow full access for all users"
+  on public.tasks for all
+  using (true)
+  with check (true);
 
-create policy "Users can delete their own areas"
-  on public.areas for delete
-  using (auth.uid() = user_id or user_id is null);
-
--- RLS Policies for Tasks
-create policy "Users can view their own tasks"
-  on public.tasks for select
-  using (auth.uid() = user_id or user_id is null);
-
-create policy "Users can insert their own tasks"
-  on public.tasks for insert
-  with check (auth.uid() = user_id or user_id is null);
-
-create policy "Users can update their own tasks"
-  on public.tasks for update
-  using (auth.uid() = user_id or user_id is null);
-
-create policy "Users can delete their own tasks"
-  on public.tasks for delete
-  using (auth.uid() = user_id or user_id is null);
+-- Grant privileges to anon and authenticated roles
+grant all on table public.areas to anon, authenticated, service_role;
+grant all on table public.tasks to anon, authenticated, service_role;
 
 -- Enable Realtime for live cross-device sync
 alter publication supabase_realtime add table public.areas;

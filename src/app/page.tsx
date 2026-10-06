@@ -77,12 +77,37 @@ export default function Home() {
           }
 
           if (remoteTasks && remoteTasks.length > 0) {
-            setTasks(remoteTasks);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mapped = remoteTasks.map((t: any) => ({
+              id: String(t.id),
+              title: t.title,
+              description: t.description || '',
+              area: t.area_id || t.area || 'medai',
+              status: t.status,
+              date: t.date || '',
+              time: t.time || '',
+              priority: t.priority,
+              position: t.position || 0,
+              created_at: t.created_at,
+              updated_at: t.updated_at,
+            }));
+            setTasks(mapped);
           } else {
             const initialT = loadLocalTasks();
             setTasks(initialT);
             try {
-              await supabase.from('tasks').insert(initialT);
+              const dbTasks = initialT.map((t) => ({
+                id: String(t.id),
+                title: t.title,
+                description: t.description || '',
+                area_id: t.area,
+                status: t.status,
+                date: t.date || null,
+                time: t.time || null,
+                priority: t.priority,
+                position: t.position || 0,
+              }));
+              await supabase.from('tasks').insert(dbTasks);
             } catch (err) {
               console.error('Error seeding initial tasks to Supabase', err);
             }
@@ -155,38 +180,45 @@ export default function Home() {
     taskData: Omit<Task, 'id'>,
     existingId?: string
   ) => {
-    if (existingId) {
-      // Update Task
-      const updatedTasks = tasks.map((t) =>
-        t.id === existingId
-          ? { ...t, ...taskData, updated_at: new Date().toISOString() }
-          : t
-      );
-      setTasks(updatedTasks);
+    const taskId = existingId || generateId();
+    const newTask: Task = {
+      id: taskId,
+      ...taskData,
+      position: Date.now(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
-      if (isSupabaseConfigured && supabase) {
-        await supabase
-          .from('tasks')
-          .update({ ...taskData, updated_at: new Date().toISOString() })
-          .eq('id', existingId);
-      }
-      showToast('Zadanie zapisane');
+    if (existingId) {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === existingId ? newTask : t))
+      );
     } else {
-      // Create Task
-      const newTask: Task = {
-        id: generateId(),
-        ...taskData,
+      setTasks((prev) => [newTask, ...prev]);
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      const dbPayload = {
+        id: taskId,
+        title: taskData.title,
+        description: taskData.description || '',
+        area_id: taskData.area,
+        status: taskData.status,
+        date: taskData.date || null,
+        time: taskData.time || null,
+        priority: taskData.priority,
         position: Date.now(),
-        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      setTasks((prev) => [newTask, ...prev]);
 
-      if (isSupabaseConfigured && supabase) {
-        await supabase.from('tasks').insert([newTask]);
+      if (existingId) {
+        await supabase.from('tasks').update(dbPayload).eq('id', existingId);
+      } else {
+        await supabase.from('tasks').insert([dbPayload]);
       }
-      showToast('Dodano zadanie');
     }
+
+    showToast(existingId ? 'Zadanie zapisane' : 'Dodano zadanie');
   };
 
   const handleDeleteTask = async (taskId: string) => {
