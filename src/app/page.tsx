@@ -59,36 +59,46 @@ export default function Home() {
   // Initial Data Loading & Realtime Subscription
   useEffect(() => {
     const fetchInitialData = async () => {
+      const localA = loadLocalAreas();
+      const localT = loadLocalTasks();
+
+      if (localA && localA.length > 0) setAreas(localA);
+      if (localT && localT.length > 0) setTasks(localT);
+
       if (isSupabaseConfigured && supabase) {
         try {
-          const { data: remoteAreas } = await supabase.from('areas').select('*').order('position');
-          const { data: remoteTasks } = await supabase.from('tasks').select('*').order('position');
+          const { data: remoteAreas, error: aErr } = await supabase.from('areas').select('*').order('position');
+          const { data: remoteTasks, error: tErr } = await supabase.from('tasks').select('*').order('position');
 
-          setAreas(remoteAreas || []);
+          if (aErr) console.error('Supabase areas fetch error:', aErr);
+          if (tErr) console.error('Supabase tasks fetch error:', tErr);
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const mapped = (remoteTasks || []).map((t: any) => ({
-            id: String(t.id),
-            title: t.title,
-            description: t.description || '',
-            area: t.area_id || t.area || '',
-            status: t.status,
-            date: t.date || '',
-            time: t.time || '',
-            priority: t.priority,
-            position: t.position || 0,
-            created_at: t.created_at,
-            updated_at: t.updated_at,
-          }));
-          setTasks(mapped);
+          if (remoteAreas && remoteAreas.length > 0) {
+            setAreas(remoteAreas);
+            saveLocalAreas(remoteAreas);
+          }
+
+          if (remoteTasks && remoteTasks.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mapped = remoteTasks.map((t: any) => ({
+              id: String(t.id),
+              title: t.title,
+              description: t.description || '',
+              area: t.area_id || t.area || '',
+              status: t.status,
+              date: t.date || '',
+              time: t.time || '',
+              priority: t.priority,
+              position: t.position || 0,
+              created_at: t.created_at,
+              updated_at: t.updated_at,
+            }));
+            setTasks(mapped);
+            saveLocalTasks(mapped);
+          }
         } catch (e) {
-          console.error('Supabase fetch error, fallback to local', e);
-          setAreas(loadLocalAreas());
-          setTasks(loadLocalTasks());
+          console.error('Supabase fetch error, keeping local state', e);
         }
-      } else {
-        setAreas(loadLocalAreas());
-        setTasks(loadLocalTasks());
       }
     };
 
@@ -118,13 +128,13 @@ export default function Home() {
 
   // Persist Local State whenever areas or tasks change
   useEffect(() => {
-    if (!isSupabaseConfigured && areas.length > 0) {
+    if (areas.length > 0) {
       saveLocalAreas(areas);
     }
   }, [areas]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured && tasks.length > 0) {
+    if (tasks.length > 0) {
       saveLocalTasks(tasks);
     }
   }, [tasks]);
