@@ -3,7 +3,7 @@ create extension if not exists "uuid-ossp";
 
 -- Areas Table
 create table if not exists public.areas (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key default gen_random_uuid()::text,
   user_id uuid references auth.users(id) on delete cascade default auth.uid(),
   name text not null,
   "desc" text default '',
@@ -14,7 +14,7 @@ create table if not exists public.areas (
 
 -- Tasks Table
 create table if not exists public.tasks (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key default gen_random_uuid()::text,
   user_id uuid references auth.users(id) on delete cascade default auth.uid(),
   area_id text not null,
   title text not null,

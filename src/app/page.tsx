@@ -69,6 +69,11 @@ export default function Home() {
           } else {
             const initialA = loadLocalAreas();
             setAreas(initialA);
+            try {
+              await supabase.from('areas').insert(initialA);
+            } catch (err) {
+              console.error('Error seeding initial areas to Supabase', err);
+            }
           }
 
           if (remoteTasks && remoteTasks.length > 0) {
@@ -76,6 +81,11 @@ export default function Home() {
           } else {
             const initialT = loadLocalTasks();
             setTasks(initialT);
+            try {
+              await supabase.from('tasks').insert(initialT);
+            } catch (err) {
+              console.error('Error seeding initial tasks to Supabase', err);
+            }
           }
         } catch (e) {
           console.error('Supabase fetch error, fallback to local', e);
